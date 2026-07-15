@@ -1,0 +1,8 @@
+# Hosted-mode additions on top of the base app (local-mode-only deps like
+# sqlite-vec/watchdog are harmless no-ops here, just unused).
+-r requirements.txt
+
+firebase-admin  # Firestore + Auth only -- see storage.py for why file storage uses Supabase instead
+google-cloud-firestore  # imported directly for Vector/DistanceMeasure/find_nearest/FieldFilter
+python-multipart  # required by FastAPI's UploadFile/multipart form handling (the upload endpoint)
+# No extra dependency for storage.py -- it's plain httpx, already in requirements.txt

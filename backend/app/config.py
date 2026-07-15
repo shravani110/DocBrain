@@ -52,6 +52,7 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
 PROVIDER_DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-5",
     "openai": "gpt-4o",
+    "gemini": "gemini-2.0-flash",
 }
 
 _lock = threading.Lock()
@@ -104,6 +105,12 @@ def set_api_key(provider: str, key: Optional[str]) -> None:
 
 
 def get_api_key(provider: str) -> Optional[str]:
+    # Hosted/cloud deployments have no OS keychain -- a real env var takes
+    # priority when present. No-op for existing local installs (never set).
+    env_val = os.environ.get(f"{provider.upper()}_API_KEY")
+    if env_val:
+        return env_val
+
     import keyring
 
     try:

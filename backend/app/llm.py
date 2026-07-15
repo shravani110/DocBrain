@@ -1,7 +1,12 @@
 """LLM answer generation with structurally enforced citations.
 
-The model must return JSON: {"answer": ..., "citations": [{"chunk_id": int,
-"quoted_span": str}]}. Every quoted_span is validated post-hoc against the
+The model must return JSON: {"answer": ..., "citations": [{"chunk_id": ...,
+"quoted_span": str}]}. chunk_id is an opaque identifier copied verbatim from
+the prompt -- an int in local mode (SQLite), an alphanumeric string in
+hosted mode (Firestore auto-ids) -- so it's matched by string form but
+returned/compared using whichever type this process's chunk ids actually
+are, never coerced to a single fixed type. Every quoted_span is validated
+post-hoc against the
 actual chunk text (fuzzy match to tolerate OCR noise and whitespace drift).
 Citations that fail validation are dropped; if none survive, the answer
 degrades to "no clear answer found" instead of shipping an unsupported claim.
@@ -29,9 +34,10 @@ Rules — these are hard constraints:
 3. If excerpts from different documents disagree (e.g. two versions of a lease with different dates), report BOTH values and name the conflicting documents. Do not silently pick one.
 3b. Be COMPLETE. If the question asks about a list or section (skills, exclusions, fees, coverage items), include EVERY item the excerpts contain for it — never just the first sub-list. Re-read the whole excerpt before answering. Use multiple citations when the answer spans several parts.
 4. Respond with JSON only, exactly this shape:
-{"answer": "<plain-english answer>", "citations": [{"chunk_id": <int>, "quoted_span": "<verbatim quote from that excerpt supporting the claim>"}], "no_answer": <true if the excerpts do not answer the question>}
+{"answer": "<plain-english answer>", "citations": [{"chunk_id": <copy the exact chunk_id shown before that excerpt>, "quoted_span": "<verbatim quote from that excerpt supporting the claim>"}], "no_answer": <true if the excerpts do not answer the question>}
 5. quoted_span must be copied VERBATIM from the excerpt text (a contiguous substring, max ~40 words).
-6. Cite every excerpt you relied on. Do not cite excerpts you did not use."""
+6. chunk_id must be copied EXACTLY as shown in the excerpt header (e.g. [chunk_id=XXXX]) -- it may be a number or a short alphanumeric string, never invent or modify it.
+7. Cite every excerpt you relied on. Do not cite excerpts you did not use."""
 
 
 class LLMError(Exception):
@@ -108,12 +114,22 @@ def generate_answer(question: str, chunks: List[Dict[str, Any]]) -> Dict[str, An
     }
 
 
-def _validate_citations(parsed: Dict[str, Any], chunk_by_id: Dict[int, Dict[str, Any]]):
+def _validate_citations(parsed: Dict[str, Any], chunk_by_id: Dict[Any, Dict[str, Any]]):
+    # chunk_by_id's keys are whatever type this process's chunk ids natively
+    # are (int in local/SQLite mode, str in hosted/Firestore mode). The model
+    # returns chunk_id as JSON, which may come back as a number or a string
+    # regardless of which mode is running -- match by string form via this
+    # lookup, but resolve back to the ORIGINAL key type so the returned
+    # citation and everything downstream (api.py/api_cloud.py's own
+    # chunk_by_id lookups, cited_ids set membership) keeps working with
+    # whichever id type this mode actually uses.
+    by_str_id = {str(k): k for k in chunk_by_id}
+
     validated, dropped = [], 0
     for cit in parsed.get("citations", []) or []:
-        try:
-            cid = int(cit.get("chunk_id"))
-        except (TypeError, ValueError):
+        raw_cid = cit.get("chunk_id")
+        cid = by_str_id.get(str(raw_cid).strip()) if raw_cid is not None else None
+        if cid is None:
             dropped += 1
             continue
         span = str(cit.get("quoted_span", "")).strip()
@@ -211,6 +227,8 @@ def _call_provider(provider: str, settings: Dict[str, Any], system: str, user: s
         return _call_anthropic(settings, system, user)
     if provider == "openai":
         return _call_openai(settings, system, user)
+    if provider == "gemini":
+        return _call_gemini(settings, system, user)
     if provider == "local":
         return _call_ollama(settings, system, user)
     raise LLMError(f"Unknown provider: {provider}")
@@ -266,6 +284,36 @@ def _call_openai(settings, system: str, user: str) -> str:
     if resp.status_code != 200:
         raise LLMError(f"OpenAI API error {resp.status_code}: {resp.text[:300]}")
     return resp.json()["choices"][0]["message"]["content"]
+
+
+def _call_gemini(settings, system: str, user: str) -> str:
+    key = get_api_key("gemini")
+    if not key:
+        raise LLMError("Gemini API key not set. Add it in Settings.")
+    model = _model_for("gemini", settings)
+    try:
+        resp = httpx.post(
+            f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
+            params={"key": key},
+            json={
+                "system_instruction": {"parts": [{"text": system}]},
+                "contents": [{"role": "user", "parts": [{"text": user}]}],
+                "generationConfig": {
+                    "responseMimeType": "application/json",
+                    "temperature": 0.1,
+                },
+            },
+            timeout=120,
+        )
+    except httpx.HTTPError as e:
+        raise LLMError(f"Could not reach the Gemini API: {type(e).__name__}")
+    if resp.status_code != 200:
+        raise LLMError(f"Gemini API error {resp.status_code}: {resp.text[:300]}")
+    candidates = resp.json().get("candidates", [])
+    if not candidates:
+        raise LLMError("Gemini returned no candidates (likely blocked by safety filters).")
+    parts = candidates[0].get("content", {}).get("parts", [])
+    return "".join(p.get("text", "") for p in parts)
 
 
 def _call_ollama(settings, system: str, user: str) -> str:

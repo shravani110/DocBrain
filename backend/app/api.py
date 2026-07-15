@@ -88,6 +88,7 @@ class SettingsUpdate(BaseModel):
     onboarded: Optional[bool] = None
     anthropic_api_key: Optional[str] = None
     openai_api_key: Optional[str] = None
+    gemini_api_key: Optional[str] = None
 
 
 @app.get("/api/settings")
@@ -95,19 +96,22 @@ def get_settings() -> Dict[str, Any]:
     s = config.load_settings()
     s["has_anthropic_key"] = bool(config.get_api_key("anthropic"))
     s["has_openai_key"] = bool(config.get_api_key("openai"))
+    s["has_gemini_key"] = bool(config.get_api_key("gemini"))
     return s
 
 
 @app.post("/api/settings")
 def update_settings(body: SettingsUpdate) -> Dict[str, Any]:
     updates = {k: v for k, v in body.dict().items()
-               if v is not None and k not in ("anthropic_api_key", "openai_api_key")}
-    if body.llm_provider is not None and body.llm_provider not in ("none", "local", "anthropic", "openai"):
+               if v is not None and k not in ("anthropic_api_key", "openai_api_key", "gemini_api_key")}
+    if body.llm_provider is not None and body.llm_provider not in ("none", "local", "anthropic", "openai", "gemini"):
         raise HTTPException(400, "Invalid llm_provider")
     if body.anthropic_api_key is not None:
         config.set_api_key("anthropic", body.anthropic_api_key or None)
     if body.openai_api_key is not None:
         config.set_api_key("openai", body.openai_api_key or None)
+    if body.gemini_api_key is not None:
+        config.set_api_key("gemini", body.gemini_api_key or None)
     merged = config.save_settings(updates)
     if body.watched_folders is not None:
         watcher.set_watched_folders(merged["watched_folders"])

@@ -5,9 +5,12 @@ import ChatSidebar from "./components/ChatSidebar";
 import ChatSidebarRail from "./components/ChatSidebarRail";
 import CitationViewer, { ViewerTarget } from "./components/CitationViewer";
 import DocumentLibrary from "./components/DocumentLibrary";
+import Login from "./components/Login";
 import Onboarding from "./components/Onboarding";
 import ProcessingQueue from "./components/ProcessingQueue";
 import SettingsPanel from "./components/SettingsPanel";
+import UploadOnboarding from "./components/UploadOnboarding";
+import * as auth from "./lib/auth";
 import {
   Conversation,
   loadConversations,
@@ -19,6 +22,11 @@ import { useTheme } from "./lib/useTheme";
 import type { AppStatus, ChatMessage, Settings } from "./types";
 
 type Tab = "chat" | "library" | "settings";
+
+// Unset/"local" for the desktop build (Electron/exe/browser-on-this-machine);
+// "hosted" only for the Netlify build, which adds sign-in and file upload
+// instead of local folder-watching. Onboarding.tsx stays untouched either way.
+const HOSTED_MODE = import.meta.env.VITE_APP_MODE === "hosted";
 
 /** True below Tailwind's `md` breakpoint (768px) -- kept in sync with the
  * `md:` classes used throughout so JS and CSS never disagree. ResizeObserver
@@ -67,6 +75,7 @@ export default function App() {
   const [tab, setTab] = useState<Tab>("chat");
   const [viewer, setViewer] = useState<ViewerTarget | null>(null);
   const [backendDown, setBackendDown] = useState(false);
+  const [authed, setAuthed] = useState(() => !HOSTED_MODE || !!auth.getSession());
   const isMobile = useIsMobile();
   const { isDark, toggleTheme } = useTheme();
 
@@ -130,10 +139,21 @@ export default function App() {
   );
 
   const refreshSettings = useCallback(() => {
+    // Hosted mode has no per-user /api/settings endpoint (no per-user LLM
+    // config in this MVP -- see plan) -- only the local desktop build has one.
+    if (HOSTED_MODE) return;
     api.settings().then(setSettings).catch(() => {});
   }, []);
 
+  const refreshStatus = useCallback(() => {
+    api.status().then((s) => {
+      setStatus(s);
+      setBackendDown(false);
+    }).catch(() => {});
+  }, []);
+
   useEffect(() => {
+    if (HOSTED_MODE && !authed) return; // nothing to poll before sign-in
     refreshSettings();
     let alive = true;
     const poll = async () => {
@@ -153,7 +173,11 @@ export default function App() {
       alive = false;
       clearInterval(iv);
     };
-  }, [refreshSettings]);
+  }, [refreshSettings, authed]);
+
+  if (HOSTED_MODE && !authed) {
+    return <Login onAuthenticated={() => setAuthed(true)} />;
+  }
 
   if (backendDown && !status) {
     return (
@@ -168,15 +192,21 @@ export default function App() {
     );
   }
 
-  if (settings && !settings.onboarded) {
-    return (
-      <Onboarding
-        settings={settings}
-        onDone={() => {
-          refreshSettings();
-        }}
-      />
-    );
+  if (status && !status.onboarded) {
+    if (HOSTED_MODE) {
+      return <UploadOnboarding onDone={() => refreshStatus()} />;
+    }
+    if (settings) {
+      return (
+        <Onboarding
+          settings={settings}
+          onDone={() => {
+            refreshSettings();
+            refreshStatus();
+          }}
+        />
+      );
+    }
   }
 
   const localOnly = status?.privacy_mode === "Local only";
@@ -199,7 +229,8 @@ export default function App() {
 
         {/* Centered tab navigation */}
         <nav className="absolute left-1/2 -translate-x-1/2 flex gap-0.5 p-1 rounded-xl" style={{ background: 'rgb(var(--color-bg-secondary))' }}>
-          {(["chat", "library", "settings"] as Tab[]).map((t) => (
+          {/* No per-user settings UI in hosted mode yet (see plan) -- nothing to configure there. */}
+          {(HOSTED_MODE ? (["chat", "library"] as Tab[]) : (["chat", "library", "settings"] as Tab[])).map((t) => (
             <button
               key={t}
               onClick={() => setTab(t)}
@@ -251,6 +282,19 @@ export default function App() {
           )}
           <span className="hidden sm:inline">{status?.privacy_mode ?? "…"}</span>
         </span>
+
+        {HOSTED_MODE && (
+          <button
+            onClick={() => {
+              auth.signOut();
+              setAuthed(false);
+            }}
+            className="btn-ghost text-sm whitespace-nowrap"
+            title="Sign out"
+          >
+            Sign out
+          </button>
+        )}
       </header>
 
       <main className="flex-1 flex min-h-0 relative">

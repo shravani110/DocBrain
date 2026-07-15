@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
-import type { BBox } from "../types";
+import type { BBox, EntityId } from "../types";
 
 export interface ViewerTarget {
-  documentId: number;
+  documentId: EntityId;
   filename: string;
   page: number;
   bboxes: BBox[];
   quotedSpan?: string;
-  chunkId?: number;
+  chunkId?: EntityId;
 }
 
 type Mode = "loading" | "pages" | "text" | "error";
@@ -233,7 +233,7 @@ function LazyPage({
   filename,
   scrollTo,
 }: {
-  documentId: number;
+  documentId: EntityId;
   page: number;
   filename: string;
   scrollTo?: boolean;

@@ -9,7 +9,7 @@ export interface AppStatus {
 
 export interface Settings {
   watched_folders: string[];
-  llm_provider: "none" | "local" | "anthropic" | "openai";
+  llm_provider: "none" | "local" | "anthropic" | "openai" | "gemini";
   llm_model: string;
   ollama_url: string;
   ollama_model: string;
@@ -17,10 +17,15 @@ export interface Settings {
   onboarded: boolean;
   has_anthropic_key: boolean;
   has_openai_key: boolean;
+  has_gemini_key: boolean;
 }
 
+// number for the local desktop build (SQLite integer ids), string for the
+// hosted build (Postgres uuid ids).
+export type EntityId = number | string;
+
 export interface DocumentRow {
-  id: number;
+  id: EntityId;
   path: string;
   filename: string;
   doc_type: string;
@@ -37,9 +42,9 @@ export interface DocumentRow {
 export type BBox = [number, number, number, number, number, string?];
 
 export interface Citation {
-  chunk_id: number;
+  chunk_id: EntityId;
   quoted_span: string;
-  document_id: number;
+  document_id: EntityId;
   filename: string;
   page_number: number;
   doc_type: string;
@@ -48,16 +53,16 @@ export interface Citation {
 }
 
 export interface RetrievedPassage {
-  chunk_id: number;
+  chunk_id: EntityId;
   text: string;
   filename: string;
-  document_id: number;
+  document_id: EntityId;
   page_number: number;
   bboxes: BBox[];
 }
 
 export interface FileHint {
-  document_id: number;
+  document_id: EntityId;
   filename: string;
   reason: string;
 }
@@ -65,7 +70,7 @@ export interface FileHint {
 export interface AskResponse {
   answer: string | null;
   citations: Citation[];
-  sources: { document_id: number; filename: string; doc_type: string }[];
+  sources: { document_id: EntityId; filename: string; doc_type: string }[];
   no_answer: boolean;
   found_in_documents: number;
   provider?: string;
