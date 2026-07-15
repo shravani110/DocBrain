@@ -1,0 +1,12 @@
+{
+  "name": "docbrain",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Privacy-first local app: ask questions about your own documents, with citations that jump to the highlighted source.",
+  "scripts": {
+    "backend": "python backend/main.py",
+    "frontend:dev": "npm --prefix frontend run dev",
+    "build": "npm --prefix frontend run build",
+    "start": "python backend/main.py"
+  }
+}

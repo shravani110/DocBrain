@@ -1,0 +1,19 @@
+node_modules/
+frontend/dist/
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.db
+*.db-wal
+*.db-shm
+.DS_Store
+
+# PyInstaller build output (regenerable via backend/docbrain.spec)
+backend/build/
+backend/dist/
+*.spec.bak
+
+# Claude Code's own local tool config, not app source
+.claude/
+

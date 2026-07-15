@@ -1,0 +1,24 @@
+# Core (required)
+fastapi
+uvicorn[standard]
+pymupdf
+watchdog
+numpy
+keyring
+python-docx
+httpx
+pillow
+sqlite-vec
+
+# Office formats beyond .docx
+openpyxl
+python-pptx
+striprtf
+
+# Semantic search (strongly recommended; app degrades to keyword-dominant
+# search without it)
+fastembed
+
+# OCR for scanned documents -- install ONE of:
+# paddleocr paddlepaddle    # preferred: layout-aware
+# pytesseract               # fallback: also needs the Tesseract binary installed
