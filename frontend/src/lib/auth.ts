@@ -120,3 +120,102 @@ export async function refreshSession(): Promise<Session | null> {
 export function signOut(): void {
   setSession(null);
 }
+
+// --- Google Sign-In ------------------------------------------------------
+//
+// Uses Google Identity Services (a small, official Google script -- not the
+// full Firebase JS SDK) to get a Google ID token, then exchanges it for a
+// Firebase session via Identity Toolkit's accounts:signInWithIdp, the same
+// REST endpoint family as signUp/signInWithPassword above. Loaded lazily
+// (only when Login.tsx actually renders the Google button, which only
+// happens in hosted mode) so the local desktop build's index.html makes
+// zero external network requests, matching its "fully local" design.
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: {
+            client_id: string;
+            callback: (response: { credential?: string }) => void;
+          }) => void;
+          renderButton: (parent: HTMLElement, options: Record<string, unknown>) => void;
+        };
+      };
+    };
+  }
+}
+
+let googleScriptPromise: Promise<void> | null = null;
+
+function loadGoogleScript(): Promise<void> {
+  if (googleScriptPromise) return googleScriptPromise;
+  googleScriptPromise = new Promise((resolve, reject) => {
+    if (window.google?.accounts?.id) {
+      resolve();
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = "https://accounts.google.com/gsi/client";
+    script.async = true;
+    script.defer = true;
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error("Failed to load Google Sign-In script."));
+    document.head.appendChild(script);
+  });
+  return googleScriptPromise;
+}
+
+function googleClientId(): string {
+  const id = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+  if (!id) throw new Error("VITE_GOOGLE_CLIENT_ID is not configured.");
+  return id;
+}
+
+async function signInWithGoogleCredential(googleIdToken: string): Promise<Session> {
+  const data = await identityToolkitFetch("signInWithIdp", {
+    postBody: `id_token=${googleIdToken}&providerId=google.com`,
+    requestUri: window.location.origin,
+  });
+  const session = toSession(data);
+  setSession(session);
+  return session;
+}
+
+/** Renders Google's own "Sign in with Google" button into `container`
+ * (Google's real button, not a custom-styled one -- more reliable than
+ * triggering the One Tap prompt from an arbitrary click handler, and users
+ * trust Google's own button styling for OAuth). Calls onSuccess/onError as
+ * the user completes (or fails/cancels) the flow. */
+export async function renderGoogleButton(
+  container: HTMLElement,
+  onSuccess: (session: Session) => void,
+  onError: (message: string) => void,
+): Promise<void> {
+  try {
+    await loadGoogleScript();
+    window.google!.accounts.id.initialize({
+      client_id: googleClientId(),
+      callback: async (response) => {
+        if (!response.credential) {
+          onError("Google sign-in was cancelled.");
+          return;
+        }
+        try {
+          onSuccess(await signInWithGoogleCredential(response.credential));
+        } catch (e) {
+          onError((e as Error).message);
+        }
+      },
+    });
+    window.google!.accounts.id.renderButton(container, {
+      theme: "outline",
+      size: "large",
+      width: 336,
+      text: "continue_with",
+    });
+  } catch (e) {
+    onError((e as Error).message);
+  }
+}

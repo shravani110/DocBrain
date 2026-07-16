@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as auth from "../lib/auth";
 
 export default function Login({ onAuthenticated }: { onAuthenticated: () => void }) {
@@ -8,6 +8,19 @@ export default function Login({ onAuthenticated }: { onAuthenticated: () => void
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [checkEmail, setCheckEmail] = useState(false);
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!googleButtonRef.current) return;
+    auth.renderGoogleButton(
+      googleButtonRef.current,
+      () => onAuthenticated(),
+      (message) => setError(message),
+    );
+    // Intentionally runs once -- Google's button is rendered into the div
+    // directly by the script, not re-rendered on every keystroke/mode toggle.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,6 +64,16 @@ export default function Login({ onAuthenticated }: { onAuthenticated: () => void
             Sign in to access your own private document library and chat history &mdash;
             only you can see what you upload.
           </p>
+        </div>
+
+        <div className="relative flex justify-center">
+          <div ref={googleButtonRef} />
+        </div>
+
+        <div className="relative flex items-center gap-3">
+          <div className="h-px flex-1" style={{ background: "rgb(var(--color-border))" }} />
+          <span className="text-xs" style={{ color: "rgb(var(--color-text-muted))" }}>or</span>
+          <div className="h-px flex-1" style={{ background: "rgb(var(--color-border))" }} />
         </div>
 
         <form onSubmit={submit} className="relative space-y-3">
