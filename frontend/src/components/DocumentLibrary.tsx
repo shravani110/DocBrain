@@ -37,7 +37,7 @@ export default function DocumentLibrary({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const folderInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
 
   const load = () => api.documents().then(setDocs).catch(() => {});
   useEffect(() => {
@@ -46,12 +46,26 @@ export default function DocumentLibrary({
     return () => clearInterval(iv);
   }, []);
 
-  const upload = async (files: FileList | null) => {
-    if (!files || files.length === 0) return;
+  const SUPPORTED_EXTS = [
+    ".pdf", ".docx", ".doc", ".xlsx", ".xls", ".pptx", ".ppt", ".txt", ".md",
+    ".rtf", ".csv", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp",
+  ];
+
+  const upload = async (files: FileList | File[] | null) => {
+    if (!files) return;
+    // A folder selection sweeps in everything, so keep only document types
+    // the backend can actually process rather than erroring on the rest.
+    const usable = Array.from(files).filter((f) =>
+      SUPPORTED_EXTS.some((ext) => f.name.toLowerCase().endsWith(ext)),
+    );
+    if (usable.length === 0) {
+      setUploadError("No supported documents found in the selection.");
+      return;
+    }
     setUploadBusy(true);
     setUploadError(null);
     try {
-      await api.uploadDocuments(files);
+      await api.uploadDocuments(usable);
       load();
     } catch (e) {
       setUploadError((e as Error).message);
@@ -135,14 +149,21 @@ export default function DocumentLibrary({
                   action -- the closest a hosted app can get to "point at a
                   folder." This is a one-time grab, not continuous watching
                   like the local app's folder-watcher, since a remote server
-                  has no ongoing access to your device's filesystem. */}
+                  has no ongoing access to your device's filesystem. The
+                  attribute is set imperatively in the ref callback: it isn't
+                  part of React's typed input attributes, and setting it on
+                  the real DOM node is the most reliable cross-browser path. */}
               <input
-                ref={folderInputRef}
+                ref={(el) => {
+                  folderInputRef.current = el;
+                  if (el) {
+                    el.setAttribute("webkitdirectory", "");
+                    el.setAttribute("directory", "");
+                  }
+                }}
                 type="file"
                 multiple
                 hidden
-                // @ts-expect-error -- webkitdirectory isn't in React's input attribute types but is broadly supported
-                webkitdirectory=""
                 onChange={(e) => upload(e.target.files)}
               />
             </div>
