@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import difflib
 import json
+import os
 import re
 from typing import Any, Dict, List, Optional
 
@@ -47,7 +48,11 @@ class LLMError(Exception):
 def generate_answer(question: str, chunks: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Returns {answer, citations: [validated], no_answer, provider, model, raw_unsupported}."""
     settings = load_settings()
-    provider = settings.get("llm_provider", "none")
+    # Hosted mode has no per-user /api/settings to persist llm_provider into
+    # settings.json (there's no writable local file that means anything on a
+    # server) -- an env var takes priority when present, same env-var-first
+    # pattern as get_api_key(). No-op for existing local installs.
+    provider = os.environ.get("LLM_PROVIDER") or settings.get("llm_provider", "none")
     if provider == "none":
         raise LLMError(
             "No answer model configured. Choose Ollama (local) or add an API key in Settings."

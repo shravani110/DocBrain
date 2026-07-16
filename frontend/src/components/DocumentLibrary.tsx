@@ -37,6 +37,7 @@ export default function DocumentLibrary({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const folderInputRef = useRef<HTMLInputElement>(null);
 
   const load = () => api.documents().then(setDocs).catch(() => {});
   useEffect(() => {
@@ -117,6 +118,32 @@ export default function DocumentLibrary({
                 hidden
                 onChange={(e) => upload(e.target.files)}
                 accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.txt,.md,.rtf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp"
+              />
+            </div>
+            <div className="mt-2 text-center">
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  folderInputRef.current?.click();
+                }}
+                className="text-xs btn-ghost"
+              >
+                Or select an entire folder to upload every file in it
+              </button>
+              {/* webkitdirectory: uploads every file in a chosen folder in one
+                  action -- the closest a hosted app can get to "point at a
+                  folder." This is a one-time grab, not continuous watching
+                  like the local app's folder-watcher, since a remote server
+                  has no ongoing access to your device's filesystem. */}
+              <input
+                ref={folderInputRef}
+                type="file"
+                multiple
+                hidden
+                // @ts-expect-error -- webkitdirectory isn't in React's input attribute types but is broadly supported
+                webkitdirectory=""
+                onChange={(e) => upload(e.target.files)}
               />
             </div>
             {uploadError && (

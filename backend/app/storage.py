@@ -16,6 +16,7 @@ check.
 from __future__ import annotations
 
 import os
+from urllib.parse import quote
 
 import httpx
 
@@ -37,9 +38,18 @@ def _bucket() -> str:
     return os.environ.get("STORAGE_BUCKET", "documents")
 
 
+def _object_url(path: str) -> str:
+    # Percent-encode each path segment (preserving the "/" separators between
+    # {user_id}/{content_hash}{ext}) -- raw f-string concatenation was passing
+    # path segments straight into the URL unencoded, which Supabase Storage's
+    # router can reject as "Invalid path specified in request URL".
+    encoded = "/".join(quote(part, safe="") for part in path.split("/"))
+    return f"{_base_url()}/object/{quote(_bucket(), safe='')}/{encoded}"
+
+
 def upload(path: str, data: bytes, content_type: str = "application/octet-stream") -> None:
     resp = httpx.post(
-        f"{_base_url()}/object/{_bucket()}/{path}",
+        _object_url(path),
         headers={**_headers(), "Content-Type": content_type, "x-upsert": "true"},
         content=data,
         timeout=120,
@@ -49,9 +59,7 @@ def upload(path: str, data: bytes, content_type: str = "application/octet-stream
 
 
 def download(path: str) -> bytes:
-    resp = httpx.get(
-        f"{_base_url()}/object/{_bucket()}/{path}", headers=_headers(), timeout=120
-    )
+    resp = httpx.get(_object_url(path), headers=_headers(), timeout=120)
     if resp.status_code != 200:
         raise StorageError(f"Download failed ({resp.status_code}): {resp.text[:300]}")
     return resp.content
