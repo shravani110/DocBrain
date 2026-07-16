@@ -52,7 +52,9 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
 PROVIDER_DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-5",
     "openai": "gpt-4o",
-    "gemini": "gemini-2.0-flash",
+    # 2.5-flash (not 2.0) -- older Gemini models lost free-tier quota; the
+    # free tier currently covers the 2.5+ family.
+    "gemini": "gemini-2.5-flash",
 }
 
 _lock = threading.Lock()

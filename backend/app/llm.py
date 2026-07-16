@@ -224,7 +224,13 @@ def _parse_json(raw: str) -> Optional[Dict[str, Any]]:
 def _model_for(provider: str, settings: Dict[str, Any]) -> str:
     if provider == "local":
         return settings.get("ollama_model") or "llama3.1"
-    return settings.get("llm_model") or PROVIDER_DEFAULT_MODELS.get(provider, "")
+    # Env var first for hosted mode (no per-user settings file there), same
+    # pattern as LLM_PROVIDER in generate_answer() and get_api_key().
+    return (
+        os.environ.get("LLM_MODEL")
+        or settings.get("llm_model")
+        or PROVIDER_DEFAULT_MODELS.get(provider, "")
+    )
 
 
 def _call_provider(provider: str, settings: Dict[str, Any], system: str, user: str) -> str:
