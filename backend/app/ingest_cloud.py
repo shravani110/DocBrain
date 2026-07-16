@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import mimetypes
+import os
 import tempfile
 import threading
 import traceback
@@ -22,7 +23,13 @@ from .chunking import make_chunks
 from .classify import classify_document
 from .extract import UnsupportedFormatError, extract
 
-_executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="ingest-cloud")
+# 1 by default: two documents processing at once roughly doubles peak memory
+# (each holds its own extracted text/embeddings in flight), which is what
+# tipped Render's free 512MB instance into an OOM kill. Raise via
+# INGEST_WORKERS on a larger instance.
+_executor = ThreadPoolExecutor(
+    max_workers=int(os.environ.get("INGEST_WORKERS", "1")), thread_name_prefix="ingest-cloud"
+)
 
 _state_lock = threading.Lock()
 # {user_id: {doc_id: {"filename": str, "stage": str}}}

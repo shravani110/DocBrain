@@ -5,6 +5,7 @@ classify.py are reused completely unchanged (stateless, no DB access).
 """
 from __future__ import annotations
 
+import os
 from typing import Any, Dict, List, Optional
 
 from . import db_cloud, embeddings
@@ -61,7 +62,15 @@ def retrieve(user_id: str, query: str, doc_types: Optional[List[str]] = None) ->
             chunk_map[cid] = ch
 
     candidates = [(cid, chunk_map[cid]["text"]) for cid, _ in fused if cid in chunk_map]
-    reranked = embeddings.rerank(query, candidates, top_k=FINAL_K)
+    # The cross-encoder reranker is a second ONNX model held in memory
+    # permanently once loaded -- on Render's free 512MB instance, that's
+    # enough on its own to tip the process into an OOM kill (confirmed via
+    # Render's own event log: "Ran out of memory (used over 512MB)"). Off by
+    # default in hosted mode for that reason; it's a quality enhancement, not
+    # a correctness requirement -- retrieve() already falls back to the RRF
+    # fusion order cleanly when this is skipped. Set ENABLE_RERANK=true on a
+    # larger instance to turn it back on.
+    reranked = embeddings.rerank(query, candidates, top_k=FINAL_K) if os.environ.get("ENABLE_RERANK") else None
     if reranked is None:
         final = [(cid, score) for cid, score in fused if cid in chunk_map][:FINAL_K]
     else:
