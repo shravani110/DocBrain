@@ -44,7 +44,7 @@ def status(user_id: str = Depends(get_current_user)) -> Dict[str, Any]:
     return {
         "queue": ingest_cloud.queue_status(user_id),
         "corpus": corpus,
-        "privacy_mode": "Hosted (Gemini + Supabase)",
+        "privacy_mode": "Hosted (Gemini + Firebase + Supabase)",
         "embedding_backend": embeddings.backend_name(),
         "ocr_engine": ocr.engine_name(),
         "onboarded": corpus["documents"] > 0,
