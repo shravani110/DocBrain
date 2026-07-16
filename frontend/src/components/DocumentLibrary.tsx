@@ -26,6 +26,13 @@ const STATUS_COLORS: Record<string, string> = {
   failed: "text-rose-600 dark:text-rose-400",
 };
 
+// A plain photo (no document text at all -- a picture of a planet, a person,
+// etc.) legitimately has nothing to extract; that's not a processing error,
+// so it shouldn't look like one or offer a "retry" that can never succeed.
+function isNoTextPhoto(d: DocumentRow): boolean {
+  return d.status === "failed" && d.status_detail === "No extractable text found.";
+}
+
 export default function DocumentLibrary({
   onOpenDocument,
 }: {
@@ -125,6 +132,16 @@ export default function DocumentLibrary({
               <p className="text-sm" style={{ color: "rgb(var(--color-text-secondary))" }}>
                 {uploadBusy ? "Uploading…" : "Drag & drop files here, or click to upload"}
               </p>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  folderInputRef.current?.click();
+                }}
+                className="mt-1 text-xs btn-ghost"
+              >
+                Or select an entire folder to upload every file in it
+              </button>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -133,18 +150,6 @@ export default function DocumentLibrary({
                 onChange={(e) => upload(e.target.files)}
                 accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.txt,.md,.rtf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp"
               />
-            </div>
-            <div className="mt-2 text-center">
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  folderInputRef.current?.click();
-                }}
-                className="text-xs btn-ghost"
-              >
-                Or select an entire folder to upload every file in it
-              </button>
               {/* webkitdirectory: uploads every file in a chosen folder in one
                   action -- the closest a hosted app can get to "point at a
                   folder." This is a one-time grab, not continuous watching
@@ -221,8 +226,16 @@ export default function DocumentLibrary({
                     </option>
                   ))}
                 </select>
-                <span className={`font-medium ${STATUS_COLORS[d.status] ?? "text-surface-400"}`}>
-                  {d.status === "processing" && d.status_detail ? d.status_detail : d.status}
+                <span
+                  className={`font-medium ${
+                    isNoTextPhoto(d) ? "text-surface-400" : STATUS_COLORS[d.status] ?? "text-surface-400"
+                  }`}
+                >
+                  {isNoTextPhoto(d)
+                    ? "no text found"
+                    : d.status === "processing" && d.status_detail
+                      ? d.status_detail
+                      : d.status}
                 </span>
                 {d.page_count > 0 && (
                   <span style={{ color: 'rgb(var(--color-text-muted))' }}>{d.page_count}p</span>
@@ -230,7 +243,7 @@ export default function DocumentLibrary({
                 {d.used_ocr === 1 && (
                   <span className="badge badge-info text-[10px] px-1.5 py-0">OCR</span>
                 )}
-                {d.status === "failed" && (
+                {d.status === "failed" && !isNoTextPhoto(d) && (
                   <button
                     onClick={() => api.reprocess(d.id).then(load)}
                     className="text-brand-600 dark:text-brand-400 hover:underline font-medium"
@@ -251,7 +264,7 @@ export default function DocumentLibrary({
                   ✕
                 </button>
               </div>
-              {d.status === "failed" && d.status_detail && (
+              {d.status === "failed" && d.status_detail && !isNoTextPhoto(d) && (
                 <div className="mt-1.5 text-xs text-rose-500 dark:text-rose-400 break-words">{d.status_detail}</div>
               )}
             </div>

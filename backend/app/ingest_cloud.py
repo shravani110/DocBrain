@@ -40,9 +40,21 @@ def _clear_stage(user_id: str, doc_id: str) -> None:
 
 
 def queue_status(user_id: str) -> Dict:
+    """Shape must match ingest.py's local-mode queue_status() exactly --
+    {pending, current}, not an arbitrary shape -- the frontend's
+    ProcessingQueue.tsx reads status.queue.current/.pending directly and a
+    mismatch here (an earlier bug: this used to return {"processing": [...]})
+    makes queue.current read as `undefined`, which is never strictly equal to
+    null, so the UI treats it as permanently busy."""
     with _state_lock:
-        current = dict(_current.get(user_id, {}))
-    return {"processing": list(current.values())}
+        items = list(_current.get(user_id, {}).values())
+    if not items:
+        return {"pending": 0, "current": None}
+    first = items[0]
+    return {
+        "pending": len(items) - 1,
+        "current": {"path": first["filename"], "filename": first["filename"], "stage": first["stage"]},
+    }
 
 
 def submit_upload(user_id: str, filename: str, data: bytes) -> str:
