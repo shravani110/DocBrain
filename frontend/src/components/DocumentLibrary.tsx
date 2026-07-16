@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { api } from "../api";
 import type { DocumentRow } from "../types";
+
+const HOSTED_MODE = import.meta.env.VITE_APP_MODE === "hosted";
 
 const DOC_TYPES = ["lease", "insurance", "tax", "contract", "other"];
 
@@ -31,6 +33,10 @@ export default function DocumentLibrary({
 }) {
   const [docs, setDocs] = useState<DocumentRow[]>([]);
   const [search, setSearch] = useState("");
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = () => api.documents().then(setDocs).catch(() => {});
   useEffect(() => {
@@ -38,6 +44,20 @@ export default function DocumentLibrary({
     const iv = setInterval(load, 2500);
     return () => clearInterval(iv);
   }, []);
+
+  const upload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    setUploadBusy(true);
+    setUploadError(null);
+    try {
+      await api.uploadDocuments(files);
+      load();
+    } catch (e) {
+      setUploadError((e as Error).message);
+    } finally {
+      setUploadBusy(false);
+    }
+  };
 
   const filtered = docs.filter(
     (d) =>
@@ -68,13 +88,52 @@ export default function DocumentLibrary({
           </div>
         </div>
 
+        {HOSTED_MODE && (
+          <div className="mb-5">
+            <div
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
+              onDragLeave={() => setDragOver(false)}
+              onDrop={(e) => {
+                e.preventDefault();
+                setDragOver(false);
+                upload(e.dataTransfer.files);
+              }}
+              onClick={() => fileInputRef.current?.click()}
+              className={`rounded-xl border-2 border-dashed p-4 text-center cursor-pointer transition-colors ${
+                dragOver ? "border-brand-500 bg-brand-50 dark:bg-brand-900/20" : ""
+              }`}
+              style={dragOver ? undefined : { borderColor: "rgb(var(--color-border))" }}
+            >
+              <p className="text-sm" style={{ color: "rgb(var(--color-text-secondary))" }}>
+                {uploadBusy ? "Uploading…" : "Drag & drop files here, or click to upload"}
+              </p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                hidden
+                onChange={(e) => upload(e.target.files)}
+                accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.txt,.md,.rtf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp"
+              />
+            </div>
+            {uploadError && (
+              <p className="mt-2 text-sm text-rose-500 dark:text-rose-400 animate-fade-in">{uploadError}</p>
+            )}
+          </div>
+        )}
+
         {filtered.length === 0 && (
           <div className="text-sm py-16 text-center animate-fade-in" style={{ color: 'rgb(var(--color-text-muted))' }}>
             <svg className="w-12 h-12 mx-auto mb-3 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
             {docs.length === 0
-              ? "No documents yet. Add a watched folder in Settings."
+              ? HOSTED_MODE
+                ? "No documents yet. Upload some above to get started."
+                : "No documents yet. Add a watched folder in Settings."
               : "No documents match your search."}
           </div>
         )}
@@ -91,7 +150,7 @@ export default function DocumentLibrary({
                 onClick={() => onOpenDocument(d)}
                 className="block w-full font-medium text-left break-words leading-snug text-sm sm:text-base transition-colors duration-150 hover:text-brand-600 dark:hover:text-brand-400"
                 style={{ color: 'rgb(var(--color-text))' }}
-                title={d.path}
+                title={d.filename}
               >
                 <div className="flex items-start gap-2 min-w-0">
                   <svg className="w-5 h-5 shrink-0 mt-0.5 opacity-50" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

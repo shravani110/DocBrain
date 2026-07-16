@@ -9,7 +9,6 @@ import Login from "./components/Login";
 import Onboarding from "./components/Onboarding";
 import ProcessingQueue from "./components/ProcessingQueue";
 import SettingsPanel from "./components/SettingsPanel";
-import UploadOnboarding from "./components/UploadOnboarding";
 import * as auth from "./lib/auth";
 import {
   Conversation,
@@ -192,21 +191,20 @@ export default function App() {
     );
   }
 
-  if (status && !status.onboarded) {
-    if (HOSTED_MODE) {
-      return <UploadOnboarding onDone={() => refreshStatus()} />;
-    }
-    if (settings) {
-      return (
-        <Onboarding
-          settings={settings}
-          onDone={() => {
-            refreshSettings();
-            refreshStatus();
-          }}
-        />
-      );
-    }
+  // Hosted mode never shows a forced first-run screen -- land on Chat
+  // immediately after sign-in, same as returning to the local desktop app
+  // past its own first run. Uploading documents happens from the Library
+  // tab instead (see DocumentLibrary.tsx), reachable anytime, not gated.
+  if (status && !status.onboarded && !HOSTED_MODE && settings) {
+    return (
+      <Onboarding
+        settings={settings}
+        onDone={() => {
+          refreshSettings();
+          refreshStatus();
+        }}
+      />
+    );
   }
 
   const localOnly = status?.privacy_mode === "Local only";
