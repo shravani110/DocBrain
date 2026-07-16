@@ -52,9 +52,11 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
 PROVIDER_DEFAULT_MODELS = {
     "anthropic": "claude-sonnet-5",
     "openai": "gpt-4o",
-    # 2.5-flash (not 2.0) -- older Gemini models lost free-tier quota; the
-    # free tier currently covers the 2.5+ family.
-    "gemini": "gemini-2.5-flash",
+    # Google retires Gemini model ids aggressively (2.0-flash lost free
+    # quota; 2.5-flash was closed to new users as of July 2026) -- current
+    # free-tier model for new API keys. Overridable without a deploy via the
+    # LLM_MODEL env var (see llm.py::_model_for).
+    "gemini": "gemini-3.5-flash",
 }
 
 _lock = threading.Lock()
