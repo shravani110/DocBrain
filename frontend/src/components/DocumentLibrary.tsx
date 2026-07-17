@@ -132,16 +132,6 @@ export default function DocumentLibrary({
               <p className="text-sm" style={{ color: "rgb(var(--color-text-secondary))" }}>
                 {uploadBusy ? "Uploading…" : "Drag & drop files here, or click to upload"}
               </p>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  folderInputRef.current?.click();
-                }}
-                className="mt-1 text-xs btn-ghost"
-              >
-                Or select an entire folder to upload every file in it
-              </button>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -150,6 +140,23 @@ export default function DocumentLibrary({
                 onChange={(e) => upload(e.target.files)}
                 accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.txt,.md,.rtf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp"
               />
+            </div>
+            {/* Sibling of the dropzone, NOT nested inside it -- the dropzone's
+                own onClick also opens a file chooser, and having two
+                file-chooser-triggering click handlers in the same DOM
+                subtree (even with stopPropagation) can consume the single
+                user-activation a click grants, leaving the second one
+                blocked with "File chooser dialog can only be shown with a
+                user activation." Keeping them structurally separate avoids
+                that entirely. */}
+            <div className="mt-2 text-center">
+              <button
+                type="button"
+                onClick={() => folderInputRef.current?.click()}
+                className="text-xs btn-ghost"
+              >
+                Or select an entire folder to upload every file in it
+              </button>
               {/* webkitdirectory: uploads every file in a chosen folder in one
                   action -- the closest a hosted app can get to "point at a
                   folder." This is a one-time grab, not continuous watching
