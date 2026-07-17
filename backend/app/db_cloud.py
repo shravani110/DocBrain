@@ -29,6 +29,7 @@ the real package source, not assumed).
 from __future__ import annotations
 
 import re
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
@@ -44,8 +45,10 @@ _ARRAY_CONTAINS_ANY_LIMIT = 30
 _VECTOR_OVERFETCH = 4  # find_nearest only prefilters on user_id server-side;
 # document_status/doc_types are filtered in Python after fetching, so ask
 # Firestore for more candidates than we need to preserve recall.
+_CORPUS_STATS_TTL = 8.0  # seconds
 
 _db: Optional[firestore.Client] = None
+_corpus_stats_cache: Dict[str, Tuple[float, Dict[str, int]]] = {}
 
 
 def _client() -> firestore.Client:
@@ -355,6 +358,16 @@ def get_document_text(user_id: str, doc_id: str, page: int) -> Optional[str]:
 
 
 def corpus_stats(user_id: str) -> Dict[str, int]:
+    """Short-TTL cached: this is called on every /api/status poll (every
+    1.5s per open tab from the frontend), and each call is 2 Firestore
+    aggregation-query reads -- uncached, that alone exhausts Firestore's
+    free-tier read quota (confirmed live: ResourceExhausted: 429 Quota
+    exceeded). A few seconds of staleness on a document *count* badge is
+    unnoticeable; the read-volume savings are not optional at this quota."""
+    cached = _corpus_stats_cache.get(user_id)
+    if cached is not None and time.monotonic() - cached[0] < _CORPUS_STATS_TTL:
+        return cached[1]
+
     docs_agg = (
         _documents_col()
         .where(filter=FieldFilter("user_id", "==", user_id))
@@ -365,4 +378,6 @@ def corpus_stats(user_id: str) -> Dict[str, int]:
     chunks_agg = (
         _chunks_col().where(filter=FieldFilter("user_id", "==", user_id)).count().get()
     )
-    return {"documents": int(docs_agg[0][0].value), "chunks": int(chunks_agg[0][0].value)}
+    stats = {"documents": int(docs_agg[0][0].value), "chunks": int(chunks_agg[0][0].value)}
+    _corpus_stats_cache[user_id] = (time.monotonic(), stats)
+    return stats

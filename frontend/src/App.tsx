@@ -167,7 +167,12 @@ export default function App() {
       }
     };
     poll();
-    const iv = setInterval(poll, 1500);
+    // Local mode polls a free SQLite query, so 1.5s costs nothing. Hosted
+    // mode's /api/status hits Firestore aggregation queries, which have a
+    // real free-tier read quota -- confirmed live via a 429 ResourceExhausted
+    // error from polling this frequently. 6s still feels responsive for a
+    // document-count/queue badge while cutting the read volume by ~4x.
+    const iv = setInterval(poll, HOSTED_MODE ? 6000 : 1500);
     return () => {
       alive = false;
       clearInterval(iv);
