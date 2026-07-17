@@ -43,6 +43,7 @@ export default function DocumentLibrary({
   const [uploadBusy, setUploadBusy] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [dragOver, setDragOver] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState<DocumentRow | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -112,6 +113,11 @@ export default function DocumentLibrary({
 
         {HOSTED_MODE && (
           <div className="mb-5">
+            {/* One visual box, but the file-chooser click lives on the text
+                itself, not this outer div -- drag/drop events don't consume
+                "user activation" the way clicking a file input does, so
+                onDragOver/onDrop are safe here, but onClick is deliberately
+                NOT on this wrapper (see below). */}
             <div
               onDragOver={(e) => {
                 e.preventDefault();
@@ -123,15 +129,32 @@ export default function DocumentLibrary({
                 setDragOver(false);
                 upload(e.dataTransfer.files);
               }}
-              onClick={() => fileInputRef.current?.click()}
-              className={`rounded-xl border-2 border-dashed p-4 text-center cursor-pointer transition-colors ${
+              className={`rounded-xl border-2 border-dashed p-4 text-center transition-colors ${
                 dragOver ? "border-brand-500 bg-brand-50 dark:bg-brand-900/20" : ""
               }`}
               style={dragOver ? undefined : { borderColor: "rgb(var(--color-border))" }}
             >
-              <p className="text-sm" style={{ color: "rgb(var(--color-text-secondary))" }}>
+              <p
+                onClick={() => fileInputRef.current?.click()}
+                className="text-sm cursor-pointer"
+                style={{ color: "rgb(var(--color-text-secondary))" }}
+              >
                 {uploadBusy ? "Uploading…" : "Drag & drop files here, or click to upload"}
               </p>
+              {/* Sibling of the paragraph above, not nested inside its click
+                  handler -- two file-chooser-triggering onClick handlers in
+                  the same parent/child chain can consume the single
+                  user-activation a click grants, leaving the second blocked
+                  with "File chooser dialog can only be shown with a user
+                  activation." Being siblings avoids that entirely, while
+                  still sharing this one bordered box visually. */}
+              <button
+                type="button"
+                onClick={() => folderInputRef.current?.click()}
+                className="mt-1 text-xs btn-ghost"
+              >
+                Or select an entire folder to upload every file in it
+              </button>
               <input
                 ref={fileInputRef}
                 type="file"
@@ -140,23 +163,6 @@ export default function DocumentLibrary({
                 onChange={(e) => upload(e.target.files)}
                 accept=".pdf,.docx,.doc,.xlsx,.xls,.pptx,.ppt,.txt,.md,.rtf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp"
               />
-            </div>
-            {/* Sibling of the dropzone, NOT nested inside it -- the dropzone's
-                own onClick also opens a file chooser, and having two
-                file-chooser-triggering click handlers in the same DOM
-                subtree (even with stopPropagation) can consume the single
-                user-activation a click grants, leaving the second one
-                blocked with "File chooser dialog can only be shown with a
-                user activation." Keeping them structurally separate avoids
-                that entirely. */}
-            <div className="mt-2 text-center">
-              <button
-                type="button"
-                onClick={() => folderInputRef.current?.click()}
-                className="text-xs btn-ghost"
-              >
-                Or select an entire folder to upload every file in it
-              </button>
               {/* webkitdirectory: uploads every file in a chosen folder in one
                   action -- the closest a hosted app can get to "point at a
                   folder." This is a one-time grab, not continuous watching
@@ -259,11 +265,7 @@ export default function DocumentLibrary({
                   </button>
                 )}
                 <button
-                  onClick={() => {
-                    if (window.confirm(`Remove "${d.filename}" from the index? The file on disk is not touched.`)) {
-                      api.deleteDocument(d.id).then(load);
-                    }
-                  }}
+                  onClick={() => setConfirmDelete(d)}
                   className="ml-auto opacity-0 group-hover:opacity-100 hover:text-rose-500 dark:hover:text-rose-400 transition-all duration-150"
                   style={{ color: 'rgb(var(--color-text-muted))' }}
                   title="Remove from index (file on disk is kept)"
@@ -278,6 +280,43 @@ export default function DocumentLibrary({
           ))}
         </div>
       </div>
+
+      {confirmDelete && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 animate-fade-in"
+          onClick={() => setConfirmDelete(null)}
+        >
+          <div className="absolute inset-0" style={{ background: "var(--overlay-bg)" }} />
+          <div
+            className="glass-card relative max-w-sm w-full p-6 space-y-4 animate-scale-in"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold" style={{ color: "rgb(var(--color-text))" }}>
+              Remove document?
+            </h3>
+            <p className="text-sm" style={{ color: "rgb(var(--color-text-secondary))" }}>
+              <span className="font-medium break-words" style={{ color: "rgb(var(--color-text))" }}>
+                {confirmDelete.filename}
+              </span>{" "}
+              will be removed from your library and search. The original file is not deleted.
+            </p>
+            <div className="flex justify-end gap-3 pt-1">
+              <button onClick={() => setConfirmDelete(null)} className="btn-ghost">
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  api.deleteDocument(confirmDelete.id).then(load);
+                  setConfirmDelete(null);
+                }}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-white bg-rose-500 hover:bg-rose-600 transition-colors"
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
